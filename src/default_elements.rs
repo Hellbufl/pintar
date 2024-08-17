@@ -127,6 +127,49 @@ pub const LINE_IED: [D3D11_INPUT_ELEMENT_DESC; 4] = [
     },
 ];
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct GSLineVertex {
+    pub position: XMFLOAT3,
+    pub colour: XMFLOAT4,
+    pub thickness: f32,
+}
+
+impl Position for GSLineVertex {
+    fn pos(&self) -> [f32; 3] {
+        self.position.into()
+    }
+}
+
+pub const GSLINE_IED: [D3D11_INPUT_ELEMENT_DESC; 3] = [
+    D3D11_INPUT_ELEMENT_DESC {
+        SemanticName: PCSTR(b"POSITION\0".as_ptr() as _),
+        SemanticIndex: 0,
+        Format: DXGI_FORMAT_R32G32B32_FLOAT,
+        InputSlot: 0,
+        AlignedByteOffset: 0,
+        InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
+        InstanceDataStepRate: 0,
+    },
+    D3D11_INPUT_ELEMENT_DESC {
+        SemanticName: PCSTR(b"COLOR\0".as_ptr() as _),
+        SemanticIndex: 0,
+        Format: DXGI_FORMAT_R32G32B32A32_FLOAT,
+        InputSlot: 0,
+        AlignedByteOffset: D3D11_APPEND_ALIGNED_ELEMENT,
+        InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
+        InstanceDataStepRate: 0,
+    },
+    D3D11_INPUT_ELEMENT_DESC {
+        SemanticName: PCSTR(b"THICKNESS\0".as_ptr() as _),
+        SemanticIndex: 0,
+        Format: DXGI_FORMAT_R32_FLOAT,
+        InputSlot: 0,
+        AlignedByteOffset: D3D11_APPEND_ALIGNED_ELEMENT,
+        InputSlotClass: D3D11_INPUT_PER_VERTEX_DATA,
+        InstanceDataStepRate: 0,
+    },
+];
 
 impl Sortable for VertexGroup<DefaultVertex, DefaultConstants> {
     fn sort(&mut self) {
@@ -159,5 +202,9 @@ impl Sortable for VertexGroup<DefaultVertex, DefaultConstants> {
 }
 
 impl Sortable for VertexGroup<LineVertex, DefaultConstants> {
+
+}
+
+impl Sortable for VertexGroup<GSLineVertex, DefaultConstants> {
 
 }

@@ -3,6 +3,7 @@ use std::any::Any;
 
 use windows::Win32::Graphics::Direct3D11::*;
 use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+use windows::Win32::Graphics::Direct3D::D3D_PRIMITIVE_TOPOLOGY;
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_R32_UINT;
 
 use crate::mesh::Mesh;
@@ -42,6 +43,7 @@ pub struct VertexGroup<T, C> {
 
     pixel_shader: Option<ID3D11PixelShader>,
     vertex_shader: Option<ID3D11VertexShader>,
+    geometry_shader: Option<ID3D11GeometryShader>,
     input_layout: Option<ID3D11InputLayout>,
 
     constants_buffer: Option<ID3D11Buffer>,
@@ -55,6 +57,8 @@ pub struct VertexGroup<T, C> {
     pub constants: C,
     pub vertices: Vec<T>,
     pub indices: Vec<u32>,
+
+    pub primitive_topology: D3D_PRIMITIVE_TOPOLOGY,
 
     pub mesh_headers: Vec<MeshHeader>,
     double_sided: bool,
@@ -103,6 +107,7 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
             vertex_shader: None,
             pixel_shader: None,
+            geometry_shader: None,
             input_layout: None,
 
             constants_buffer: None,
@@ -115,6 +120,8 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
             constants: Default::default(),
             vertices: Vec::with_capacity(vertex_capacity),
             indices: Vec::with_capacity(index_capacity),
+
+            primitive_topology: D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
 
             mesh_headers: Vec::new(),
             double_sided
@@ -178,6 +185,25 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
         };
 
         self.pixel_shader = pixel_shader;
+        self
+    }
+
+    pub fn geometry_shader(mut self, shader_bytes: &[u8]) -> Self {
+        let geometry_shader = {
+            let mut shader: Option<ID3D11GeometryShader> = None;
+            unsafe {
+                self.device.CreateGeometryShader(shader_bytes, None, Some(&mut shader) )
+                    .expect("Failed to create geometry shader")
+            };
+            shader
+        };
+
+        self.geometry_shader = geometry_shader;
+        self
+    }
+
+    pub fn primitive_topology(mut self, topology: D3D_PRIMITIVE_TOPOLOGY) -> Self {
+        self.primitive_topology = topology;
         self
     }
 
@@ -364,6 +390,7 @@ impl<T: std::marker::Copy + Position + 'static, C: std::marker::Copy + std::defa
         unsafe {
             if self.constants_buffer.is_some() {
                 context.VSSetConstantBuffers(0, Some(&[Some(self.constants_buffer.as_ref().unwrap().clone())]));
+                context.GSSetConstantBuffers(0, Some(&[Some(self.constants_buffer.as_ref().unwrap().clone())]));
                 context.PSSetConstantBuffers(0, Some(&[Some(self.constants_buffer.as_ref().unwrap().clone())]));
             }
         }
@@ -375,9 +402,12 @@ impl<T: std::marker::Copy + Position + 'static, C: std::marker::Copy + std::defa
             context.IASetInputLayout(self.input_layout.as_ref().unwrap());
             context.IASetVertexBuffers(0, 1, Some(&self.vertex_buffer), Some(&stride), Some(&offset));
             context.IASetIndexBuffer(self.index_buffer.as_ref().unwrap(), DXGI_FORMAT_R32_UINT, 0);
-            context.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            context.IASetPrimitiveTopology(self.primitive_topology);
+            // context.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
             context.VSSetShader(self.vertex_shader.as_ref().unwrap(), None);
+            context.GSSetShader(self.geometry_shader.as_ref().unwrap(), None);
             context.PSSetShader(self.pixel_shader.as_ref().unwrap(), None);
         }
     }

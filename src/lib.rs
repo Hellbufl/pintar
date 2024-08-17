@@ -6,6 +6,7 @@ use mesh::{Mesh, LineMesh};
 use default_elements::DefaultVertex;
 use windows::Win32::Foundation::BOOL;
 use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_D24_UNORM_S8_UINT, DXGI_FORMAT_D32_FLOAT_S8X24_UINT, DXGI_FORMAT_R8G8B8A8_UNORM};
 use windows::Win32::Graphics::Dxgi::{IDXGISwapChain, DXGI_SWAP_CHAIN_DESC};
 use windows::Win32::Graphics::Direct3D11::*;
@@ -16,6 +17,8 @@ use tracing::*;
 pub mod default_elements;
 pub mod vertex_group;
 pub mod mesh;
+
+use crate::mesh::GSLineMesh; //dunno why but the compiler made me do this specifically??
 
 pub mod primitives;
 
@@ -256,13 +259,23 @@ impl Pintar {
         let line_vertex_group: vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(device.clone(), false)
             .with_constants()
             .vertex_shader(include_bytes!("./shaders/line_vs.cso"), &default_elements::LINE_IED)
-            .pixel_shader(include_bytes!("./shaders/line_ps.cso"));
+            .pixel_shader(include_bytes!("./shaders/line_ps.cso"))
+            .geometry_shader(include_bytes!("./shaders/default_gs.cso"));
         pintar.add_vertex_group("default_line".to_string(), Box::new(line_vertex_group));
+
+        let gs_line_vertex_group: vertex_group::VertexGroup<default_elements::GSLineVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(device.clone(), false)
+            .with_constants()
+            .vertex_shader(include_bytes!("./shaders/gs_line_vs.cso"), &default_elements::GSLINE_IED)
+            .pixel_shader(include_bytes!("./shaders/gs_line_ps.cso"))
+            .geometry_shader(include_bytes!("./shaders/gs_line_gs.cso"))
+            .primitive_topology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+        pintar.add_vertex_group("default_gs_line".to_string(), Box::new(gs_line_vertex_group));
 
         let default_vertex_group: vertex_group::VertexGroup<default_elements::DefaultVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(device.clone(), true)
             .with_constants()
             .vertex_shader(include_bytes!("./shaders/default_vs.cso"), &default_elements::DEFAULT_IED)
-            .pixel_shader(include_bytes!("./shaders/default_ps.cso"));
+            .pixel_shader(include_bytes!("./shaders/default_ps.cso"))
+            .geometry_shader(include_bytes!("./shaders/default_gs.cso"));
         pintar.add_vertex_group("default".to_string(), Box::new(default_vertex_group));
 
         pintar.update_back_buffer_data(swapchain);
@@ -611,6 +624,31 @@ impl Pintar {
 
         vertex_group.mesh_headers.last_mut().unwrap().vertex_count += vertices.len() as u32;
         vertex_group.mesh_headers.last_mut().unwrap().index_count += indices.len() as u32;
+    }
+
+    pub fn add_gs_line(&mut self, start: [f32; 3], end: [f32; 3], colour: [f32; 4], thickness: f32) {
+        let vertex_group: &mut vertex_group::VertexGroup<default_elements::GSLineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default_gs_line".to_string()).unwrap();
+
+        let vertices: Vec<default_elements::GSLineVertex> = vec![
+            default_elements::GSLineVertex {
+                position: start.into(),
+                colour: colour.into(),
+                thickness,
+            },
+            default_elements::GSLineVertex {
+                position: end.into(),
+                colour: colour.into(),
+                thickness,
+            },
+        ];
+
+        let indices: Vec<u32> = vec![
+            0, 1
+        ];
+
+        let line_mesh = GSLineMesh::new(&vertices, &indices);
+
+        vertex_group.add_mesh(line_mesh);
     }
 
     fn d3d11_debug_dump(&self) {

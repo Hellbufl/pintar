@@ -1,5 +1,5 @@
 use directx_math::{XMQuaternionRotationRollPitchYaw, XMVector3Rotate, XMLoadFloat3, XMStoreFloat3};
-use crate::default_elements::{DefaultVertex, LineVertex};
+use crate::default_elements::{DefaultVertex, LineVertex, GSLineVertex};
 
 pub trait Mesh<T> {
     fn vertices(&self) -> Vec<T>;
@@ -72,6 +72,27 @@ impl LineMesh {
 
 impl Mesh<LineVertex> for LineMesh {
     fn vertices(&self) -> Vec<LineVertex> {
+        self.vertices.clone()
+    }
+
+    fn indices(&self) -> Vec<u32> {
+        self.indices.clone()
+    }
+}
+
+pub struct GSLineMesh {
+    vertices: Vec<GSLineVertex>,
+    indices: Vec<u32>,
+}
+
+impl GSLineMesh {
+    pub fn new(vertices: &[GSLineVertex], indices: &[u32]) -> Self {
+        GSLineMesh { vertices: vertices.to_vec(), indices: indices.to_vec() }
+    }
+}
+
+impl Mesh<GSLineVertex> for GSLineMesh {
+    fn vertices(&self) -> Vec<GSLineVertex> {
         self.vertices.clone()
     }
 
