@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::time;
 
 use mesh::{Mesh, LineMesh};
 use default_elements::DefaultVertex;
@@ -530,7 +531,7 @@ impl Pintar {
         vertex_group.add_mesh(mesh);
     }
 
-    pub fn add_line(&mut self, start: [f32; 3], end: [f32; 3], colour: [f32; 4], thickness: f32) {
+    pub fn start_line(&mut self, start: [f32; 3], end: [f32; 3], colour: [f32; 4], thickness: f32) {
         let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default_line".to_string()).unwrap();
 
         let vertices: Vec<default_elements::LineVertex> = vec![
@@ -558,7 +559,6 @@ impl Pintar {
                 colour: colour.into(),
                 thickness,
             },
-            
         ];
 
         let indices: Vec<u32> = vec![
@@ -611,6 +611,88 @@ impl Pintar {
 
         vertex_group.mesh_headers.last_mut().unwrap().vertex_count += vertices.len() as u32;
         vertex_group.mesh_headers.last_mut().unwrap().index_count += indices.len() as u32;
+    }
+
+    pub fn add_line(&mut self, nodes: Vec<[f32; 3]>, colour: [f32; 4], thickness: f32) -> u64 {
+        let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default_line".to_string()).unwrap();
+
+        let mut vertices: Vec<default_elements::LineVertex> = Vec::with_capacity(nodes.len() * 2);
+        let mut indices: Vec<u32> = Vec::with_capacity(nodes.len() * 6);
+
+        vertices.push(
+            default_elements::LineVertex {
+                position1: nodes[0].into(),
+                position2: nodes[1].into(),
+                colour: colour.into(),
+                thickness,
+        });
+
+        vertices.push(
+            default_elements::LineVertex {
+                position1: nodes[0].into(),
+                position2: nodes[1].into(),
+                colour: colour.into(),
+                thickness: -thickness,
+        });
+
+        vertices.push(
+            default_elements::LineVertex {
+                position1: nodes[1].into(),
+                position2: nodes[0].into(),
+                colour: colour.into(),
+                thickness: -thickness,
+        });
+
+        vertices.push(
+            default_elements::LineVertex {
+                position1: nodes[1].into(),
+                position2: nodes[0].into(),
+                colour: colour.into(),
+                thickness,
+        });
+
+        indices.append(&mut vec![
+            0, 2, 1, 1, 2, 3
+        ]);
+
+        let mut debug_time: u64 = 0;
+        // let debug_start = time::Instant::now();
+
+        for i in 2..nodes.len() {
+            let debug_start = time::Instant::now();
+            let last_indices = indices[indices.len()-2..].to_vec();
+
+            vertices.append(&mut vec![
+                default_elements::LineVertex {
+                    position1: nodes[i].into(),
+                    position2: nodes[i-1].into(),
+                    colour: colour.into(),
+                    thickness: -thickness,
+                },
+                default_elements::LineVertex {
+                    position1: nodes[i].into(),
+                    position2: nodes[i-1].into(),
+                    colour: colour.into(),
+                    thickness: thickness,
+                },
+            ]);
+
+            indices.append(&mut vec![
+                last_indices[0],
+                last_indices[0] + 2,
+                last_indices[1],
+                last_indices[1],
+                last_indices[1] + 1,
+                last_indices[1] + 2,
+            ]);
+            debug_time += debug_start.elapsed().as_micros() as u64;
+        }
+        // debug_time = debug_start.elapsed().as_micros() as u64;
+
+        let line_mesh = LineMesh::new(&vertices, &indices);
+        vertex_group.add_mesh(line_mesh);
+
+        debug_time
     }
 
     fn d3d11_debug_dump(&self) {
