@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::ops::Deref;
 use std::time;
 
 use mesh::{Mesh, LineMesh};
@@ -322,7 +323,7 @@ impl Pintar {
                 vertex_group.clear();
             },
             None => {
-                error!("Vertex Group '{}' not found!", name);
+                error!("Failed to clear: Vertex Group '{name}' not found!");
             },
         }
     }
@@ -571,13 +572,25 @@ impl Pintar {
         gs_line_vertex_group.constants.view_proj = XMMatrix::from(&view_proj);
     }
 
-    pub fn add_default_mesh(&mut self, mesh: impl Mesh<DefaultVertex>) {
-        let vertex_group: &mut vertex_group::VertexGroup<default_elements::DefaultVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default".to_string()).unwrap();
+    pub fn add_default_mesh(&mut self, vertex_group_name: String, mesh: impl Mesh<DefaultVertex>) {
+        let vertex_group: &mut vertex_group::VertexGroup<default_elements::DefaultVertex, default_elements::DefaultConstants> = match self.get_vertex_group_as(vertex_group_name.clone()) {
+            Some(group) => group,
+            None => {
+                error!("Failed to add default mesh: Vertex group '{vertex_group_name}' not found!");
+                return;
+            }
+        };
         vertex_group.add_mesh(mesh);
+
+        // if let Some(vertex_group) = self.get_vertex_group_as::<&mut vertex_group::VertexGroup<default_elements::DefaultVertex, default_elements::DefaultConstants>>(vertex_group_name.clone()) {
+        //     vertex_group.add_mesh(mesh);
+        // } else {
+        //     error!("Failed to add default mesh: Vertex group '{vertex_group_name}' not found!");
+        // }
     }
 
-    pub fn start_line(&mut self, start: [f32; 3], end: [f32; 3], colour: [f32; 4], thickness: f32) {
-        let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default_line".to_string()).unwrap();
+    pub fn start_line(&mut self, vertex_group_name: String, start: [f32; 3], end: [f32; 3], colour: [f32; 4], thickness: f32) {
+        let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as(vertex_group_name).unwrap();
 
         let vertices: Vec<default_elements::LineVertex> = vec![
             default_elements::LineVertex {
@@ -615,8 +628,8 @@ impl Pintar {
         vertex_group.add_mesh(line_mesh);
     }
 
-    pub fn extend_line(&mut self, end: [f32; 3], colour: [f32; 4], thickness: f32) {
-        let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default_line".to_string()).unwrap();
+    pub fn extend_line(&mut self, vertex_group_name: String, end: [f32; 3], colour: [f32; 4], thickness: f32) {
+        let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as(vertex_group_name).unwrap();
 
         let last_indices = vertex_group.indices.as_slice()[vertex_group.indices.len()-2..].to_vec();
 
@@ -658,8 +671,8 @@ impl Pintar {
         vertex_group.mesh_headers.last_mut().unwrap().index_count += indices.len() as u32;
     }
 
-    pub fn add_line(&mut self, nodes: Vec<[f32; 3]>, colour: [f32; 4], thickness: f32) {
-        let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default_line".to_string()).unwrap();
+    pub fn add_line(&mut self, vertex_group_name: String, nodes: Vec<[f32; 3]>, colour: [f32; 4], thickness: f32) {
+        let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as(vertex_group_name).unwrap();
 
         let mut vertices: Vec<default_elements::LineVertex> = Vec::with_capacity(nodes.len() * 2);
         let mut indices: Vec<u32> = Vec::with_capacity(nodes.len() * 6);
