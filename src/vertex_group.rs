@@ -2,7 +2,10 @@
 use std::any::Any;
 
 use windows::Win32::Graphics::Direct3D11::*;
-use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+use windows::Win32::Graphics::Direct3D::{
+    D3D_PRIMITIVE_TOPOLOGY,
+    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+};
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_R32_UINT;
 
 use crate::mesh::Mesh;
@@ -42,7 +45,10 @@ pub struct VertexGroup<T, C> {
 
     pixel_shader: Option<ID3D11PixelShader>,
     vertex_shader: Option<ID3D11VertexShader>,
+    geometry_shader: Option<ID3D11GeometryShader>,
     input_layout: Option<ID3D11InputLayout>,
+
+    topology: D3D_PRIMITIVE_TOPOLOGY,
 
     constants_buffer: Option<ID3D11Buffer>,
 
@@ -76,8 +82,8 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
         let mut vertex_buffer: Option<ID3D11Buffer> = None;
         unsafe { device.CreateBuffer(
-                &vertex_buffer_desc, 
-                None, 
+                &vertex_buffer_desc,
+                None,
                 Some( &mut vertex_buffer)).expect("Failed to create vertex buffer");
         }
 
@@ -93,8 +99,8 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
         let mut index_buffer: Option<ID3D11Buffer> = None;
         unsafe { device.CreateBuffer(
-                &index_buffer_desc, 
-                None, 
+                &index_buffer_desc,
+                None,
                 Some( &mut index_buffer)).expect("Failed to create index buffer");
         }
 
@@ -102,8 +108,11 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
             device,
 
             vertex_shader: None,
+            geometry_shader: None,
             pixel_shader: None,
             input_layout: None,
+
+            topology: D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
 
             constants_buffer: None,
 
@@ -134,12 +143,17 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
         let mut constants_buf: Option<ID3D11Buffer> = None;
         unsafe { self.device.CreateBuffer(
-            &constants_buf_desc, 
-            None, 
+            &constants_buf_desc,
+            None,
             Some( &mut constants_buf)).expect("Failed to create constants buffer");
         }
 
         self.constants_buffer = constants_buf;
+        self
+    }
+
+    pub fn topology(mut self, topology: D3D_PRIMITIVE_TOPOLOGY) -> Self {
+        self.topology = topology;
         self
     }
 
@@ -161,9 +175,23 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
                 Some(&mut input_layout),
                 ).expect("Failed to create input layout");
         }
-        
+
         self.vertex_shader = vertex_shader;
         self.input_layout = input_layout;
+        self
+    }
+
+    pub fn geometry_shader(mut self, shader_bytes: &[u8]) -> Self {
+        let geometry_shader = {
+            let mut shader: Option<ID3D11GeometryShader> = None;
+            unsafe {
+                self.device.CreateGeometryShader(shader_bytes, None, Some(&mut shader) )
+                    .expect("Failed to create geometry shader")
+            };
+            shader
+        };
+
+        self.geometry_shader = geometry_shader;
         self
     }
 
@@ -221,7 +249,7 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
             let indices: &mut [u32] = std::slice::from_raw_parts_mut(mapped_indices.pData as *mut u32, self.indices.len());
             indices.copy_from_slice(&self.indices);
-            
+
             context.Unmap(self.index_buffer.as_ref().unwrap(), 0);
         }
     }
@@ -250,7 +278,7 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
         let mut min_x = mesh.vertices().first().unwrap().pos()[0];
         let mut max_x = min_x;
-        
+
         let mut min_y = mesh.vertices().first().unwrap().pos()[1];
         let mut max_y = min_y;
 
@@ -265,7 +293,7 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
             min_y = min_y.min(pos[1]);
             max_y = max_y.max(pos[1]);
-        
+
             min_z = min_z.min(pos[2]);
             max_z = max_z.max(pos[2]);
         }
@@ -300,8 +328,8 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
         let mut vertex_buffer: Option<ID3D11Buffer> = None;
         unsafe { self.device.CreateBuffer(
-                &vertex_buffer_desc, 
-                None, 
+                &vertex_buffer_desc,
+                None,
                 Some( &mut vertex_buffer)).expect("Failed to create vertex buffer");
         }
 
@@ -326,8 +354,8 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 
         let mut index_buffer: Option<ID3D11Buffer> = None;
         unsafe { self.device.CreateBuffer(
-                &index_buffer_desc, 
-                None, 
+                &index_buffer_desc,
+                None,
                 Some( &mut index_buffer)).expect("Failed to create index buffer");
         }
 
@@ -336,7 +364,7 @@ impl<T: std::marker::Copy + Position, C: std::marker::Copy + std::default::Defau
 }
 
 impl<T: std::marker::Copy + Position + 'static, C: std::marker::Copy + std::default::Default + 'static> OrderedRenderable for VertexGroup<T, C>
-where VertexGroup<T, C>: Sortable 
+where VertexGroup<T, C>: Sortable
 {}
 
 
@@ -364,6 +392,11 @@ impl<T: std::marker::Copy + Position + 'static, C: std::marker::Copy + std::defa
         unsafe {
             if self.constants_buffer.is_some() {
                 context.VSSetConstantBuffers(0, Some(&[Some(self.constants_buffer.as_ref().unwrap().clone())]));
+
+                if let Some(_gs) = self.geometry_shader.as_ref() {
+                    context.GSSetConstantBuffers(0, Some(&[Some(self.constants_buffer.as_ref().unwrap().clone())]));
+                }
+
                 context.PSSetConstantBuffers(0, Some(&[Some(self.constants_buffer.as_ref().unwrap().clone())]));
             }
         }
@@ -375,9 +408,10 @@ impl<T: std::marker::Copy + Position + 'static, C: std::marker::Copy + std::defa
             context.IASetInputLayout(self.input_layout.as_ref().unwrap());
             context.IASetVertexBuffers(0, 1, Some(&self.vertex_buffer), Some(&stride), Some(&offset));
             context.IASetIndexBuffer(self.index_buffer.as_ref().unwrap(), DXGI_FORMAT_R32_UINT, 0);
-            context.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            context.IASetPrimitiveTopology(self.topology);
 
             context.VSSetShader(self.vertex_shader.as_ref().unwrap(), None);
+            if let Some(gs) = self.geometry_shader.as_ref() { context.GSSetShader(gs, None); }
             context.PSSetShader(self.pixel_shader.as_ref().unwrap(), None);
         }
     }

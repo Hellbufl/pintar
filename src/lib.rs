@@ -6,7 +6,12 @@ use std::time;
 use mesh::{Mesh, LineMesh};
 use default_elements::DefaultVertex;
 use windows::Win32::Foundation::BOOL;
-use windows::Win32::Graphics::Direct3D::D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+use windows::Win32::Graphics::Direct3D::{
+    D3D_PRIMITIVE_TOPOLOGY,
+    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
+    D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP,
+};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_D24_UNORM_S8_UINT, DXGI_FORMAT_D32_FLOAT_S8X24_UINT, DXGI_FORMAT_R8G8B8A8_UNORM};
 use windows::Win32::Graphics::Dxgi::{IDXGISwapChain, DXGI_SWAP_CHAIN_DESC};
 use windows::Win32::Graphics::Direct3D11::*;
@@ -98,7 +103,7 @@ impl Pintar {
 
         let mut blend_state: Option<ID3D11BlendState> = None;
         unsafe { device.CreateBlendState(
-            &blend_desc, 
+            &blend_desc,
             Some( &mut blend_state)).expect("Failed to create blend state");
         }
 
@@ -112,14 +117,14 @@ impl Pintar {
 
         let mut ccw_rasterizer_state: Option<ID3D11RasterizerState> = None;
         unsafe { device.CreateRasterizerState(
-            &rasterizer_desc, 
+            &rasterizer_desc,
             Some( &mut ccw_rasterizer_state)).expect("Failed to create CCW rasterizer state");
         }
 
         rasterizer_desc.FrontCounterClockwise = BOOL(0);
         let mut cw_rasterizer_state: Option<ID3D11RasterizerState> = None;
         unsafe { device.CreateRasterizerState(
-            &rasterizer_desc, 
+            &rasterizer_desc,
             Some( &mut cw_rasterizer_state)).expect("Failed to create CW rasterizer state");
         }
 
@@ -149,7 +154,7 @@ impl Pintar {
 
         let mut depth_stencil_state: Option<ID3D11DepthStencilState> = None;
         unsafe { device.CreateDepthStencilState(
-            &depth_stencil_desc, 
+            &depth_stencil_desc,
             Some( &mut depth_stencil_state)).expect("Failed to create depth stencil state");
         }
 
@@ -178,7 +183,7 @@ impl Pintar {
             },
             Usage: D3D11_USAGE_DEFAULT,
         };
-        
+
         let mut trans_tex: Option<ID3D11Texture2D> = None;
         unsafe { device.CreateTexture2D(&trans_desc, None, Some(&mut trans_tex)).expect("Failed to create transparent target texture.") };
 
@@ -224,7 +229,7 @@ impl Pintar {
             device.CreateSamplerState(&fullscreen_quad_sampler_state_desc, Some(&mut fullscreen_quad_sampler_state))
                 .expect("Failed to create fullscreen quad sampler state.");
         }
-        
+
         let mut pintar = Pintar {
             device: device.clone(),
 
@@ -254,17 +259,28 @@ impl Pintar {
         };
 
         // Default vertex groups
-        let line_vertex_group: vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(device.clone(), false)
-            .with_constants()
-            .vertex_shader(include_bytes!("./shaders/line_vs.cso"), &default_elements::LINE_IED)
-            .pixel_shader(include_bytes!("./shaders/line_ps.cso"));
-        pintar.add_vertex_group("default_line".to_string(), Box::new(line_vertex_group));
+        // let line_vertex_group: vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(device.clone(), false)
+        //     .with_constants()
+        //     .vertex_shader(include_bytes!("./shaders/line_vs.cso"), &default_elements::LINE_IED)
+        //     .pixel_shader(include_bytes!("./shaders/line_ps.cso"));
+        // pintar.add_vertex_group("default_line".to_string(), Box::new(line_vertex_group));
+        pintar.add_line_vertex_group("default_line".to_string());
 
-        let default_vertex_group: vertex_group::VertexGroup<default_elements::DefaultVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(device.clone(), true)
+        let gs_line_vertex_group: vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(device.clone(), false)
             .with_constants()
-            .vertex_shader(include_bytes!("./shaders/default_vs.cso"), &default_elements::DEFAULT_IED)
-            .pixel_shader(include_bytes!("./shaders/default_ps.cso"));
-        pintar.add_vertex_group("default".to_string(), Box::new(default_vertex_group));
+            .vertex_shader(include_bytes!("./shaders/gs_line_vs.cso"), &default_elements::LINE_IED)
+            .pixel_shader(include_bytes!("./shaders/gs_line_ps.cso"))
+            // .geometry_shader(include_bytes!("./shaders/gs_line_gs.cso"))
+            .topology(D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP);
+        pintar.add_vertex_group("gs_line".to_string(), Box::new(gs_line_vertex_group));
+
+        // let default_vertex_group: vertex_group::VertexGroup<default_elements::DefaultVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(device.clone(), true)
+        //     .with_constants()
+        //     .vertex_shader(include_bytes!("./shaders/default_vs.cso"), &default_elements::DEFAULT_IED)
+        //     .pixel_shader(include_bytes!("./shaders/default_ps.cso"));
+        //     // .geometry_shader(include_bytes!("./shaders/default_gs.cso"));
+        // pintar.add_vertex_group("default".to_string(), Box::new(default_vertex_group));
+        pintar.add_default_vertex_group("default".to_string());
 
         pintar.update_back_buffer_data(swapchain);
 
@@ -273,6 +289,22 @@ impl Pintar {
 
     pub fn add_vertex_group(&mut self, name: String, vertex_group: Box<dyn vertex_group::OrderedRenderable>) {
         self.vertex_groups.insert(name, vertex_group);
+    }
+
+    pub fn add_default_vertex_group(&mut self, name: String) {
+        let default_vertex_group: vertex_group::VertexGroup<default_elements::DefaultVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(self.device.clone(), true)
+            .with_constants()
+            .vertex_shader(include_bytes!("./shaders/default_vs.cso"), &default_elements::DEFAULT_IED)
+            .pixel_shader(include_bytes!("./shaders/default_ps.cso"));
+        self.add_vertex_group(name, Box::new(default_vertex_group));
+    }
+
+    pub fn add_line_vertex_group(&mut self, name: String) {
+        let line_vertex_group: vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = vertex_group::VertexGroup::new(self.device.clone(), false)
+            .with_constants()
+            .vertex_shader(include_bytes!("./shaders/line_vs.cso"), &default_elements::LINE_IED)
+            .pixel_shader(include_bytes!("./shaders/line_ps.cso"));
+        self.add_vertex_group(name, Box::new(line_vertex_group));
     }
 
     pub fn get_vertex_group_as<T: 'static>(&mut self, name: String) -> Option<&mut T> {
@@ -284,7 +316,18 @@ impl Pintar {
         }
     }
 
-    pub fn clear_vertex_groups(&mut self) {
+    pub fn clear_vertex_group(&mut self, name: String) {
+        match self.vertex_groups.get_mut(&name) {
+            Some(vertex_group) => {
+                vertex_group.clear();
+            },
+            None => {
+                error!("Vertex Group '{}' not found!", name);
+            },
+        }
+    }
+
+    pub fn clear_all_vertex_groups(&mut self) {
         for vertex_group in self.vertex_groups.values_mut() {
             vertex_group.clear();
         }
@@ -381,7 +424,7 @@ impl Pintar {
             let res = self.device.CreateDepthStencilView(self.depth_stencil_resource.as_ref(), None, Some(&mut depth_stencil_view));
             if res.is_err() {
                 self.d3d11_debug_dump();
-            }       
+            }
             res.expect("Failed to create depth stencil view!");
         }
 
@@ -404,7 +447,7 @@ impl Pintar {
                 let res = self.device.CreateTexture2D(&quad_tex_desc, None, Some(&mut quad_tex));
                 if res.is_err() {
                     self.d3d11_debug_dump();
-                }       
+                }
                 res.expect("Failed to create quad texture!");
             }
             self.fullscreen_quad_resource = Some(quad_tex.unwrap().cast::<ID3D11Resource>().unwrap());
@@ -414,7 +457,7 @@ impl Pintar {
                 let res = self.device.CreateRenderTargetView(self.fullscreen_quad_resource.as_ref(), None, Some(&mut self.fullscreen_quad_rtv));
                 if res.is_err() {
                     self.d3d11_debug_dump();
-                }       
+                }
                 res.expect("Failed to create quad rtv!");
             }
         }
@@ -449,7 +492,6 @@ impl Pintar {
                             }
                         }
                     }
-                    
                 }
             }
 
@@ -471,7 +513,7 @@ impl Pintar {
                 let res = self.device.CreateTexture2D(&ss_quad_tex_desc, None, Some(&mut ss_quad_tex));
                 if res.is_err() {
                     self.d3d11_debug_dump();
-                }       
+                }
                 res.expect("Failed to create ss quad texture!");
             }
             self.ss_fullscreen_quad_resource = Some(ss_quad_tex.unwrap().cast::<ID3D11Resource>().unwrap());
@@ -490,7 +532,7 @@ impl Pintar {
                 let res = self.device.CreateShaderResourceView(self.ss_fullscreen_quad_resource.as_ref(), None, Some(&mut self.ss_fullscreen_quad_shader_resource_view));
                 if res.is_err() {
                     self.d3d11_debug_dump();
-                }       
+                }
                 res.expect("Failed to create quad shader resource view!");
             }
         }
@@ -524,6 +566,9 @@ impl Pintar {
 
         let line_vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default_line".to_string()).unwrap();
         line_vertex_group.constants.view_proj = XMMatrix::from(&view_proj);
+
+        let gs_line_vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("gs_line".to_string()).unwrap();
+        gs_line_vertex_group.constants.view_proj = XMMatrix::from(&view_proj);
     }
 
     pub fn add_default_mesh(&mut self, mesh: impl Mesh<DefaultVertex>) {
@@ -613,7 +658,7 @@ impl Pintar {
         vertex_group.mesh_headers.last_mut().unwrap().index_count += indices.len() as u32;
     }
 
-    pub fn add_line(&mut self, nodes: Vec<[f32; 3]>, colour: [f32; 4], thickness: f32) -> u64 {
+    pub fn add_line(&mut self, nodes: Vec<[f32; 3]>, colour: [f32; 4], thickness: f32) {
         let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("default_line".to_string()).unwrap();
 
         let mut vertices: Vec<default_elements::LineVertex> = Vec::with_capacity(nodes.len() * 2);
@@ -655,11 +700,7 @@ impl Pintar {
             0, 2, 1, 1, 2, 3
         ]);
 
-        let mut debug_time: u64 = 0;
-        // let debug_start = time::Instant::now();
-
         for i in 2..nodes.len() {
-            let debug_start = time::Instant::now();
             let last_indices = indices[indices.len()-2..].to_vec();
 
             vertices.append(&mut vec![
@@ -685,14 +726,37 @@ impl Pintar {
                 last_indices[1] + 1,
                 last_indices[1] + 2,
             ]);
-            debug_time += debug_start.elapsed().as_micros() as u64;
         }
-        // debug_time = debug_start.elapsed().as_micros() as u64;
 
         let line_mesh = LineMesh::new(&vertices, &indices);
         vertex_group.add_mesh(line_mesh);
+    }
 
-        debug_time
+    pub fn add_gs_line(&mut self, start: [f32; 3], end: [f32; 3], colour: [f32; 4], thickness: f32) {
+        let vertex_group: &mut vertex_group::VertexGroup<default_elements::LineVertex, default_elements::DefaultConstants> = self.get_vertex_group_as("gs_line".to_string()).unwrap();
+
+        let vertices: Vec<default_elements::LineVertex> = vec![
+            default_elements::LineVertex {
+                position1: start.into(),
+                position2: start.into(),
+                colour: colour.into(),
+                thickness,
+            },
+            default_elements::LineVertex {
+                position1: end.into(),
+                position2: end.into(),
+                colour: colour.into(),
+                thickness,
+            },
+        ];
+
+        let indices: Vec<u32> = vec![
+            0, 1
+        ];
+
+        let line_mesh = LineMesh::new(&vertices, &indices);
+
+        vertex_group.add_mesh(line_mesh);
     }
 
     fn d3d11_debug_dump(&self) {
