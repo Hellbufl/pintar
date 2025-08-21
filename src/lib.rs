@@ -1,15 +1,11 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem::size_of;
-use std::ops::Deref;
-use std::time;
 
 use mesh::{Mesh, LineMesh};
 use default_elements::DefaultVertex;
 use windows::Win32::Foundation::BOOL;
 use windows::Win32::Graphics::Direct3D::{
-    D3D_PRIMITIVE_TOPOLOGY,
-    D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
     D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
     D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP,
 };
@@ -71,7 +67,7 @@ pub struct Pintar {
 }
 
 impl Pintar {
-    pub fn new(swapchain: &IDXGISwapChain, depth_pass_target_index: u32) -> Pintar {
+    pub fn init(swapchain: &IDXGISwapChain, depth_pass_target_index: u32) -> Pintar {
         let device = unsafe { swapchain.GetDevice::<ID3D11Device>().unwrap() };
 
         let mut swap_chain_desc = DXGI_SWAP_CHAIN_DESC::default();
